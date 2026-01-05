@@ -87,6 +87,22 @@ const BlocklyEditor = () => {
       _toolboxConfig = null;
       _state = BlocklyState();
       _readOnly = false;
+      _code = {
+        dart: '',
+        js: '',
+        lua: '',
+        php: '',
+        python: '',
+      };      
+    }
+    // Clear and recreate the blocklyEditor element to ensure clean state
+    const element = document.querySelector('#blocklyEditor');
+    if (element) {
+      element.innerHTML = '';
+    }
+    const domReadyScript = document.querySelector('#domReadyScript');
+    if (domReadyScript) {
+      domReadyScript.remove();
     }
   }
 

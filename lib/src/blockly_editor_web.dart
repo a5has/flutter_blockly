@@ -3,6 +3,7 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:ui_web';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:web/web.dart' as web;
 
@@ -37,6 +38,7 @@ class BlocklyEditor {
     this.onInject,
     this.onChange,
     this.onDispose,
+    this.onDomReady,
   });
 
   /// [BlocklyOptions interface](https://developers.google.com/blockly/reference/js/blockly.blocklyoptions_interface)
@@ -73,6 +75,13 @@ class BlocklyEditor {
   /// ```
   final Function? onDispose;
 
+  /// It is called when DOM is ready
+  /// ## Example
+  /// ```dart
+  /// void onDomReady() {}
+  /// ```
+  final Function? onDomReady;
+
   /// Create a default Blockly state
   BlocklyState _state = const BlocklyState();
 
@@ -80,10 +89,6 @@ class BlocklyEditor {
   ToolboxInfo? _toolboxConfig;
 
   bool _readOnly = false;
-
-  final web.Element _divElement = web.HTMLDivElement()
-    ..style.width = '100%'
-    ..style.height = '100%';
 
   /// code
   BlocklyCode _code = const BlocklyCode();
@@ -94,7 +99,18 @@ class BlocklyEditor {
   /// ```
   void init({BlocklyOptions? workspaceConfiguration, dynamic initial}) {
     final web.Element? editor = web.document.querySelector('#blocklyEditor');
-    if (_toolboxConfig != null || editor == null) {
+
+    if (editor == null) {
+      // should not happen, unless broken syncronization of 
+      // build() {return HtmlElementView()} AND following finished DOM build (#blocklyEditor div) before this init() call.
+      _onCallback(
+        cb: onError,
+        arg: 'The #blocklyEditor div not found in the DOM. Is there a sync issue in BlocklyEditor(web) initialization sequence?',
+      );
+      return;
+    }
+
+    if (_toolboxConfig != null) {
       return;
     }
 
@@ -109,6 +125,7 @@ class BlocklyEditor {
         'initial': initial ?? this.initial,
       },
     );
+    return;
   }
 
   /// ## Example
@@ -174,6 +191,9 @@ class BlocklyEditor {
           break;
         case 'toolboxConfig':
           _toolboxConfig = ToolboxInfo.fromJson(json['data']);
+          break;
+        case 'domReady':
+          _onCallback(cb: onDomReady, hasArg: false);
           break;
       }
     } catch (err) {
@@ -241,55 +261,76 @@ class BlocklyEditor {
   /// ```dart
   /// editor.htmlRender(onPageFinished: editor.init);
   /// ```
-  void htmlRender({
+  Future<void> htmlRender({
     String? style,
     String? script,
     String? editor,
     String? packages,
     Function? onPageFinished,
-  }) async {
+  }) async {    
+
     final web.Element? blocklyScript =
         web.document.querySelector('#blocklyScript');
-    _divElement.setHTMLUnsafe("" as JSString);
-    _divElement.insertAdjacentElement(
-      'beforeend',
-      createWebTag(
-        tag: 'style',
-        content: html.htmlStyle(style: style),
-      ),
-    );
-    _divElement.insertAdjacentHTML(
-      'beforeend',
-      (editor ?? html.htmlEditor()) as JSString,
-    );
-
-    final scripts = [
-      'blocks_compressed',
-      'dart_compressed',
-      'javascript_compressed',
-      'lua_compressed',
-      'php_compressed',
-      'python_compressed',
-      'en',
-      'html_script',
-    ];
 
     if (blocklyScript == null) {
+      final domReadyScript = await rootBundle.loadString(
+                'packages/flutter_blockly/assets/dom_ready.js');
+
       platformViewRegistry.registerViewFactory(
         'blocklyEditor',
         (int viewId) {
-          return _divElement;
+          final web.Element divElement = web.HTMLDivElement()
+            ..style.width = '100%'
+            ..style.height = '100%'
+            ..id = 'blocklyEditor_$viewId';
+
+          divElement.setHTMLUnsafe("" as JSString);
+          divElement.insertAdjacentElement(
+            'beforeend',
+            createWebTag(
+              tag: 'style',
+              content: html.htmlStyle(style: style),
+            ),
+          );
+          divElement.insertAdjacentHTML(
+            'beforeend',
+            (editor ?? html.htmlEditor()) as JSString,
+          );
+
+          web.document.body?.insertAdjacentElement(
+            'beforeend', 
+            createWebTag(
+              tag: 'script',
+              content: domReadyScript,
+              id: 'domReadyScript'
+            ),
+          );
+          
+          return divElement;
         },
       );
 
-      final blockly = createWebTag(
-        tag: 'script',
-        content: await rootBundle.loadString(
-          'packages/flutter_blockly/assets/blockly_compressed.js',
+      web.document.body?.insertAdjacentElement(
+        'beforeend', 
+        createWebTag(
+          tag: 'script',
+          content: await rootBundle.loadString(
+            'packages/flutter_blockly/assets/blockly_compressed.js',
+          ),
+          id: 'blocklyScript',
         ),
       );
-      blockly.id = "blocklyScript";
-      web.document.body?.insertAdjacentElement('beforeend', blockly);
+
+      final scripts = [
+        'blocks_compressed',
+        'dart_compressed',
+        'javascript_compressed',
+        'lua_compressed',
+        'php_compressed',
+        'python_compressed',
+        'en',
+        'html_script',
+      ];
 
       for (var name in scripts) {
         web.document.body?.insertAdjacentElement(
@@ -358,13 +399,17 @@ class BlocklyEditor {
     return BlocklyData.fromJson(data);
   }
 
-  void _onCallback({Function? cb, dynamic arg}) {
+  void _onCallback({Function? cb, dynamic arg, bool hasArg = true}) {
     try {
       if (cb != null) {
-        cb(arg);
+        if (hasArg) {
+          cb(arg);
+        } else {
+          cb();
+        }
       }
     } catch (err) {
-      _onCallback(cb: onError, arg: err);
+      _onCallback(cb: onError, arg: "$err in callback, cb: $cb, hasArg: $hasArg, arg: $arg" );
     }
   }
 }

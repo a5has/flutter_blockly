@@ -22,6 +22,8 @@ class WebViewApp extends StatefulWidget {
 }
 
 class _WebViewAppState extends State<WebViewApp> {
+  bool _isBlocklyVisible = true;
+
   // final BlocklyOptions workspaceConfiguration = BlocklyOptions(
   //   grid: const GridOptions(
   //     spacing: 20,
@@ -57,7 +59,7 @@ class _WebViewAppState extends State<WebViewApp> {
     'rendererOverrides': null,
     'rtl': null,
     'scrollbars': null,
-    'sounds': null,
+    'sounds': false,
     'theme': null,
     'toolboxPosition': null,
     'trashcan': null,
@@ -87,23 +89,33 @@ class _WebViewAppState extends State<WebViewApp> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: BlocklyEditorWidget(
-          workspaceConfiguration: workspaceConfiguration,
-          initial: initialJson,
-          onInject: onInject,
-          onChange: onChange,
-          onDispose: onDispose,
-          onError: onError,
-          style: '.wrapper-web {top:58px;}',
-        ),
+        child: _isBlocklyVisible
+            ? BlocklyEditorWidget(
+                workspaceConfiguration: workspaceConfiguration,
+                initial: initialJson,
+                onInject: onInject,
+                onChange: onChange,
+                onDispose: onDispose,
+                onError: onError,
+                style: '.wrapper-web {top:58px;}',
+              )
+            : const Center(
+                child: Text('Click button to show editor'),
+              ),
       ),
       appBar: AppBar(
-        title: const Text('Title'),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {},
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+        title: const Text('Blockly Editor Sample'),
+        actions: [
+          IconButton(
+            onPressed: () {
+              setState(() {
+                _isBlocklyVisible = !_isBlocklyVisible;
+              });
+            },
+            tooltip: _isBlocklyVisible ? 'Hide Blockly Editor' : 'Show Blockly Editor',
+            icon: Icon(_isBlocklyVisible ? Icons.close_outlined : Icons.add_box_outlined),
+          ),
+        ],
       ),
       bottomNavigationBar: const SizedBox(height: 50),
     );
